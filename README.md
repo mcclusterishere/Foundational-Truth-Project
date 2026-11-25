@@ -6,3 +6,5 @@ Open The-Real-History-v6.html offline. The date slider swaps three locally embed
 
 
 The map previews are from the Library of Congress; item links and reuse notes appear in the atlas. The orientation map uses Natural Earth. Archive links are references, not a claim to license those sites or third-party translations.
+
+[Download the editable v6 source ZIP](./The-Real-History-v6.zip) · [Standalone atlas HTML](./The-Real-History-v6.html)
