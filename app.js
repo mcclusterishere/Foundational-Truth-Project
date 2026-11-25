@@ -40,7 +40,17 @@ const years=e=>{const a=[e.startYear,e.endYear].filter(Number.isFinite);return [
 const fmt=y=>y<0?Math.abs(y).toLocaleString('en-US')+' BCE':y.toLocaleString('en-US')+' CE';
 function period(e,p){if(!p)return true;if(p==='undated')return !dated(e);if(!dated(e))return false;const [lo,hi]=years(e);return p==='early'?lo<1:p==='pre'?hi>=1&&lo<=1491:hi>=1492}
 function stamp(e){if(!dated(e))return 'Undated';const [a,b]=years(e);return a===b?fmt(a):'c. '+fmt(a)+' to '+fmt(b)}
-function choose(id,{fromMap=false}={}){selection=id;document.querySelectorAll('.card,.pin').forEach(n=>{const active=n.dataset.id===id;n.classList.toggle('active',active);if(n.classList.contains('pin')){n.dataset.selected=active;n.setAttribute('aria-pressed',active)}else n.querySelector('button').setAttribute('aria-pressed',active)});if(fromMap){document.body.classList.remove('world');const card=[...document.querySelectorAll('.card')].find(n=>n.dataset.id===id);card?.querySelector('button').focus()}}
+function choose(id,{fromMap=false}={}){selection=id;document.querySelectorAll('.card,.pin').forEach(n=>{const active=n.dataset.id===id;n.classList.toggle('active',active);if(n.classList.contains('pin')){n.dataset.selected=active;n.setAttribute('aria-pressed',active)}else n.querySelector('button').setAttribute('aria-pressed',active)});if(fromMap){document.body.classList.remove('world');const card=[...document.querySelectorAll('.card')].find(n=>n.dataset.id===id);card?.scrollIntoView({block:'nearest'});card?.querySelector('button')?.focus()}}
+function revealEvidence(id){
+  if(!id)return;
+  document.body.classList.remove('world');
+  if(!visible.some(e=>e.id===id)){
+    for(const k of ['query','period','trait',...options]){if($(k))$(k).value=''}
+    if($('strict-complexion'))$('strict-complexion').checked=false;
+    filter();
+  }
+  choose(id,{fromMap:true});
+}
 function cards(){const target=$('cards');target.replaceChildren();$('count').textContent=visible.length+' of '+data.length+' evidence entries';if(!visible.length){target.append(element('p','No evidence matches these filters. Try clearing one of the filters.'));return}
   visible.forEach((e,i)=>{const n=element('article',null,'card mn__post-card');n.dataset.id=e.id;
     const h=element('h3',e.title); const m=element('p',null,'meta');m.append(element('span',e.status,'tag'),document.createTextNode(' · '+e.kind+' · '+e.region+' · '+stamp(e)));
@@ -88,7 +98,7 @@ const places=[
  ['indigenous',1718,1764,-91.55,31,'Tunica villages · approximate corridor','https://www.tunicabiloxi.org/history/'],
  ['indigenous',1718,1729,-91.36,31.53,'Natchez Grand Village · approx. public location','https://mdah.ms.gov/explore-mississippi/grand-village-natchez-indians'],
  ['indigenous',1718,1835,-91.55,29.88,'Chitimacha / Bayou Teche · representative location, not full homeland','https://chitimacha.gov/history-culture/tribal-history'],
- ['indigenous',1835,1835,-93.75,32.52,'Caddo treaty meeting · present-day Shreveport area','https://mycaddonation.com/history-1'],
+ ['indigenous',1835,1835,-93.75,32.52,'Caddo treaty meeting · present-day Shreveport area','https://mycaddonation.com/history-1','caddo-1835'],
  ['modern',0,3000,-90.07,29.95,'New Orleans, Louisiana · modern locator',''],
  ['modern',0,3000,-91.4,31.56,'Natchez, Mississippi · modern locator',''],
  ['modern',0,3000,-93.75,32.52,'Shreveport, Louisiana · modern locator','']
@@ -97,7 +107,7 @@ function renderLayers(year,key){
  const map=$('pilot-points'), list=$('pilot-key');map.replaceChildren();list.replaceChildren();let occupied=[];
  const x=lon=>34+(-lon-87.5)*(-56)+392,y=lat=>235-(lat-28)*39;
  map.append(svg('path',{d:'M210 52H270 M240 22V82',stroke:'#453c37',fill:'none','aria-hidden':'true'}));
- for(const [layer,start,end,lon,lat,label,url] of places){
+ for(const [layer,start,end,lon,lat,label,url,evidenceId] of places){
   if(!$('layer-'+layer).checked||year<start||year>end)continue;
   if(layer==='control'&&year===1803&&label.includes('Cabildo')&&!key.startsWith('1803-11')&&!key.startsWith('1803-12'))continue;
   const renderedLabel=label.startsWith('Cabildo')?(key==='1803-11-30'?'Cabildo · Spain hands over to France':'Cabildo · France hands over to the U.S.'):label;
@@ -106,23 +116,140 @@ function renderLayers(year,key){
   const ox=x(lon),oy=y(lat);let px=ox,py=oy;
   for(let j=0;occupied.some(([u,v])=>Math.hypot(u-px,v-py)<23)&&j<12;j++){let a=j*2.4;px=ox+(24+j*2)*Math.cos(a);py=oy+(24+j*2)*Math.sin(a);}
   occupied.push([px,py]);if(ox!==px||oy!==py)map.append(svg('line',{x1:ox,y1:oy,x2:px,y2:py,stroke:'#918176'}));
-  const g=svg('g',{transform:'translate('+px+','+py+')',class:'point '+layer});
-  g.append(svg('circle',{r:11}));const n=svg('text',{});n.textContent=number;g.append(n);map.append(g);
-  const row=element('li',null,layer);row.append(element('span',layerNames[layer]+': ','kicker'));
+  const g=svg('g',{transform:'translate('+px+','+py+')',class:'point '+layer,tabindex:0,role:'button','aria-label':renderedLabel+(evidenceId?' Open matching evidence card.':'')});
+  if(evidenceId)g.setAttribute('data-id',evidenceId);
+  g.append(svg('circle',{r:11}));const n=svg('text',{});n.textContent=number;g.append(n);
+  const activate=()=>{for(const item of list.children)item.classList.toggle('active',item.dataset.n===String(number));const rowItem=[...list.children].find(item=>item.dataset.n===String(number));rowItem?.scrollIntoView({block:'nearest'});if(evidenceId)revealEvidence(evidenceId)};
+  g.addEventListener('click',activate);
+  g.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();activate()}});
+  map.append(g);
+  const row=element('li',null,layer);row.dataset.n=String(number);
+  row.append(element('span',layerNames[layer]+': ','kicker'));
   if(url){const a=element('a',renderedLabel);a.href=url;a.target='_blank';a.rel='noopener noreferrer';row.append(a)} else row.append(element('span',renderedLabel));
   list.append(row);
  }
  if(!list.children.length)list.append(element('li','No selected reference points for this stop.'));
 }
+const SCAN_MIN=1, SCAN_MAX=8, SCAN_STEP=1.25;
+let scanScale=1, scanX=0, scanY=0, scanDrag=null, scanPinch=null, scanPointers=new Map();
+function applyScanTransform(){
+  const stage=$('scan-stage'), vp=$('scan-viewport');
+  if(!stage)return;
+  const vw=vp&&vp.clientWidth||0, vh=vp&&vp.clientHeight||0;
+  const sw=(stage.offsetWidth||0)*scanScale, sh=(stage.offsetHeight||0)*scanScale;
+  if(vw&&sw){
+    const minX=Math.min(0,vw-sw), maxX=Math.max(0,vw-sw);
+    const minY=Math.min(0,vh-sh), maxY=Math.max(0,vh-sh);
+    scanX=Math.min(maxX,Math.max(minX,scanX));
+    scanY=Math.min(maxY,Math.max(minY,scanY));
+  }
+  stage.style.transform='translate('+scanX+'px,'+scanY+'px) scale('+scanScale+')';
+  const live=$('scan-zoom-status');
+  if(live)live.textContent=Math.round(scanScale*100)+' percent';
+  const zin=$('scan-zoom-in'), zout=$('scan-zoom-out');
+  if(zin)zin.disabled=scanScale>=SCAN_MAX-1e-6;
+  if(zout)zout.disabled=scanScale<=SCAN_MIN+1e-6;
+}
+function resetScanView(){scanScale=1;scanX=0;scanY=0;applyScanTransform()}
+function zoomScanAt(next,cx,cy){
+  const vp=$('scan-viewport');if(!vp)return;
+  const rect=typeof vp.getBoundingClientRect==='function'?vp.getBoundingClientRect():{left:0,top:0,width:vp.clientWidth||0,height:vp.clientHeight||0};
+  if(cx==null)cx=(rect.width||0)/2;else cx=cx-(rect.left||0);
+  if(cy==null)cy=(rect.height||0)/2;else cy=cy-(rect.top||0);
+  next=Math.min(SCAN_MAX,Math.max(SCAN_MIN,next));
+  const px=scanScale?(cx-scanX)/scanScale:0, py=scanScale?(cy-scanY)/scanScale:0;
+  scanScale=next;scanX=cx-px*scanScale;scanY=cy-py*scanScale;applyScanTransform();
+}
+function panScan(dx,dy){scanX+=dx;scanY+=dy;applyScanTransform()}
+function wireScanViewer(pane,img){
+  const viewport=element('div',null,'scan-viewport');
+  viewport.id='scan-viewport';
+  viewport.tabIndex=0;
+  viewport.setAttribute('role','group');
+  viewport.setAttribute('aria-label','Historic map viewer. Use plus and minus to zoom, arrow keys to pan, and zero to reset.');
+  const stage=element('div',null,'scan-stage');
+  stage.id='scan-stage';
+  img.setAttribute('draggable','false');
+  stage.append(img);
+  viewport.append(stage);
+  const tools=element('div',null,'scan-tools');
+  tools.setAttribute('role','toolbar');
+  tools.setAttribute('aria-label','Map zoom controls');
+  const mk=(id,label,text)=>{const b=element('button',text);b.type='button';b.id=id;b.setAttribute('aria-label',label);return b};
+  const zin=mk('scan-zoom-in','Zoom in','+');
+  const zout=mk('scan-zoom-out','Zoom out','\u2212');
+  const zreset=mk('scan-zoom-reset','Reset zoom and pan','Reset');
+  const status=element('span','100 percent','scan-zoom-status');
+  status.id='scan-zoom-status';
+  status.setAttribute('aria-live','polite');
+  tools.append(zin,zout,zreset,status);
+  zin.addEventListener('click',()=>zoomScanAt(scanScale*SCAN_STEP));
+  zout.addEventListener('click',()=>zoomScanAt(scanScale/SCAN_STEP));
+  zreset.addEventListener('click',resetScanView);
+  viewport.addEventListener('wheel',event=>{
+    event.preventDefault();
+    zoomScanAt(scanScale*(event.deltaY<0?SCAN_STEP:1/SCAN_STEP),event.clientX,event.clientY);
+  },{passive:false});
+  scanPointers=new Map();
+  viewport.addEventListener('pointerdown',event=>{
+    if(event.button!==undefined&&event.button!==0)return;
+    scanPointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(viewport.setPointerCapture&&event.pointerId!=null)try{viewport.setPointerCapture(event.pointerId)}catch(err){}
+    if(scanPointers.size>=2){
+      const [a,b]=[...scanPointers.values()];
+      scanPinch={dist:Math.hypot(a.x-b.x,a.y-b.y)||1,scale:scanScale};
+      scanDrag=null;
+      viewport.classList.remove('panning');
+      return;
+    }
+    scanDrag={x:event.clientX,y:event.clientY,id:event.pointerId};
+    viewport.classList.add('panning');
+  });
+  viewport.addEventListener('pointermove',event=>{
+    if(!scanPointers.has(event.pointerId))return;
+    scanPointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(scanPointers.size>=2){
+      const [a,b]=[...scanPointers.values()];
+      const dist=Math.hypot(a.x-b.x,a.y-b.y);
+      if(!scanPinch)scanPinch={dist:dist||1,scale:scanScale};
+      zoomScanAt(scanPinch.scale*(dist/scanPinch.dist||1),(a.x+b.x)/2,(a.y+b.y)/2);
+      return;
+    }
+    if(scanDrag&&event.pointerId===scanDrag.id){
+      panScan(event.clientX-scanDrag.x,event.clientY-scanDrag.y);
+      scanDrag.x=event.clientX;scanDrag.y=event.clientY;
+    }
+  });
+  const endPointer=event=>{
+    scanPointers.delete(event.pointerId);
+    if(scanPointers.size<2)scanPinch=null;
+    if(scanDrag&&event.pointerId===scanDrag.id){scanDrag=null;viewport.classList.remove('panning')}
+  };
+  viewport.addEventListener('pointerup',endPointer);
+  viewport.addEventListener('pointercancel',endPointer);
+  viewport.addEventListener('keydown',event=>{
+    const step=40;
+    if(event.key==='+'||event.key==='='||event.key==='Add'){event.preventDefault();zoomScanAt(scanScale*SCAN_STEP)}
+    else if(event.key==='-'||event.key==='_'||event.key==='Subtract'){event.preventDefault();zoomScanAt(scanScale/SCAN_STEP)}
+    else if(event.key==='0'||event.key==='Home'||event.key==='Escape'){event.preventDefault();resetScanView()}
+    else if(event.key==='ArrowLeft'){event.preventDefault();panScan(step,0)}
+    else if(event.key==='ArrowRight'){event.preventDefault();panScan(-step,0)}
+    else if(event.key==='ArrowUp'){event.preventDefault();panScan(0,step)}
+    else if(event.key==='ArrowDown'){event.preventDefault();panScan(0,-step)}
+  });
+  pane.append(viewport,tools);
+  resetScanView();
+}
 function renderScan(date){
  let key=date.startsWith('1718')?'delisle':date==='1725-05-30'?'city':date==='1752'?'anville':date==='c. 1755'?'chegeree':date==='c. 1774'||date==='1763-02-10'?'bowles':null;
  const pane=$('scan-pane');pane.replaceChildren();
+ scanDrag=null;scanPinch=null;scanPointers=new Map();
  if(!key){pane.append(element('p','No original map is attached to this stop. The dated evidence and its source sit above.','scan-empty'));return;}
  const [made,who,credit,rights,url]=scanInfo[key];
  const fallback=element('p','Archive link only. A local copy of this scan is not included.','scan-empty');fallback.hidden=Boolean(scanAssets[key]);
  if(scanAssets[key]){const img=element('img');img.alt='Archival map dated '+made+', by '+who;
- img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false;fallback.textContent='Image could not load here. Open the original at the archive.'});
- img.src=scanAssets[key];pane.append(img);}
+ img.addEventListener('error',()=>{img.hidden=true;const vp=$('scan-viewport'),tools=pane.querySelector('.scan-tools');if(vp)vp.hidden=true;if(tools)tools.hidden=true;fallback.hidden=false;fallback.textContent='Image could not load here. Open the original at the archive.'});
+ img.src=scanAssets[key];wireScanViewer(pane,img);}
  const a=element('a','Open original at the archive');a.href=url;a.target='_blank';a.rel='noopener noreferrer';
  pane.append(fallback,element('p',made+' · '+who,'trail-meta'),element('p',credit+' · '+rights,'time-context'),a);
 }

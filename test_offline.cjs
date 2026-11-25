@@ -2,13 +2,27 @@ const fs=require('node:fs'), vm=require('node:vm'), assert=require('node:assert/
 const html=fs.readFileSync('The-Real-History-v6.html','utf8');
 const stack=[];
 class E {
- constructor(tag=''){this.tag=tag;this.children=[];this.dataset={};this.attributes={};this.value='';this.textContent='';this.events={};this.classes=new Set;this.classList={contains:c=>this.classes.has(c),toggle:(c,v)=>v?this.classes.add(c):this.classes.delete(c)};stack.push(this)}
+ constructor(tag=''){this.tag=tag;this.children=[];this.dataset={};this.attributes={};this.value='';this.textContent='';this.events={};this.classes=new Set;this.style={};this.hidden=false;this.disabled=false;this.clientWidth=400;this.clientHeight=300;this.offsetWidth=400;this.offsetHeight=300;this.classList={contains:c=>this.classes.has(c),add:c=>this.classes.add(c),remove:c=>this.classes.delete(c),toggle:(c,v)=>v?this.classes.add(c):this.classes.delete(c)};stack.push(this)}
  set className(s){for(const c of s.split(' '))this.classes.add(c)}
- setAttribute(k,v){this.attributes[k]=String(v);if(k==='class')this.className=v;if(k==='data-id')this.dataset.id=v}
+ set id(v){this._id=v;this.attributes.id=String(v);ids[v]=this}
+ get id(){return this._id}
+ set tabIndex(v){this.attributes.tabindex=String(v)}
+ setAttribute(k,v){this.attributes[k]=String(v);if(k==='class')this.className=v;if(k==='id')this.id=v;if(k==='data-id')this.dataset.id=v;if(k==='data-n')this.dataset.n=v}
  append(...v){this.children.push(...v)}
  replaceChildren(...nodes){this.children=nodes}
  addEventListener(t,cb){this.events[t]=cb}
- querySelector(t){return this.children.find(c=>c.tag===t)}
+ querySelector(t){
+  const match=c=>{
+   if(!c)return false;
+   if(t.startsWith('.'))return c.classes&&c.classes.has(t.slice(1));
+   if(t.startsWith('#'))return c.id===t.slice(1);
+   return c.tag===t;
+  };
+  const walk=n=>{for(const c of n.children||[]){if(match(c))return c;const hit=walk(c);if(hit)return hit}};
+  return walk(this);
+ }
+ getBoundingClientRect(){return {left:0,top:0,width:this.clientWidth||0,height:this.clientHeight||0}}
+ scrollIntoView(){}
  focus(){focus=this}
 }
 let focus; const ids={};
@@ -81,3 +95,27 @@ ids['time-slider'].value=12;ids['time-slider'].events.input();
 assert(!ids['scan-pane'].querySelector('img'));
 assert(ids['pilot-key'].children.some(e=>e.querySelector('a')?.textContent.includes('France hands over to the U.S.')));
 console.log('PASS: scan swap, no-map state, independent layer toggles across dates, precise local handover');
+
+ids['time-slider'].value=3;ids['time-slider'].events.input();
+assert.ok(ids['scan-viewport']);assert.ok(ids['scan-stage']);assert.ok(ids['scan-zoom-in']);
+assert.match(ids['scan-stage'].style.transform,/scale\(1\)/);
+ids['scan-zoom-in'].events.click();
+const zoomed=Number(ids['scan-stage'].style.transform.match(/scale\(([^)]+)\)/)[1]);
+assert.ok(zoomed>1);
+ids['scan-viewport'].events.keydown({key:'-',preventDefault(){}});
+ids['scan-zoom-reset'].events.click();
+assert.match(ids['scan-stage'].style.transform,/scale\(1\)/);
+ids['scan-viewport'].events.keydown({key:'+',preventDefault(){}});
+assert.ok(Number(ids['scan-stage'].style.transform.match(/scale\(([^)]+)\)/)[1])>1);
+ids['scan-viewport'].events.keydown({key:'0',preventDefault(){}});
+assert.match(ids['scan-stage'].style.transform,/scale\(1\)/);
+console.log('PASS: historic map zoom, pan reset, and keyboard zoom controls');
+
+ids['layer-indigenous'].checked=true;ids['layer-claim'].checked=true;ids['layer-control'].checked=true;
+ids['time-slider'].value=15;ids['time-slider'].events.input();
+const caddoPoint=[...ids['pilot-points'].children].find(c=>c.dataset.id==='caddo-1835');
+assert.ok(caddoPoint);assert.equal(caddoPoint.attributes.role,'button');
+caddoPoint.events.keydown({key:'Enter',preventDefault(){}});
+const caddoCard=ids.cards.children.find(c=>c.dataset.id==='caddo-1835');
+assert.ok(caddoCard);assert.ok(caddoCard.classes.has('active'));
+console.log('PASS: reference map pins are keyboard-focusable and open the matching evidence card');
